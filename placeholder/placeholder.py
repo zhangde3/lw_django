@@ -9,6 +9,8 @@ SECRET_KEY=os.environ.get('SECRET_KEY','uoj(at1xi_v#5y&-1^9amng&)aw@hle$h3p7(gqm
 
 ALLOWED_HOSTS=os.environ.get('ALLOWED_HOSTS','localhost').split(',')
 
+BASE_DIR=os.path.dirname(__file__)
+
 settings.configure(
 	DEBUG=DEBUG,
 	SECRET_KEY=SECRET_KEY,
@@ -19,9 +21,24 @@ settings.configure(
 		'django.middleware.csrf.CsrfViewMiddleware',
 		'django.middleware.clickjacking.XFrameOptionsMiddleware',
 	),
+	INSTALLED_APPS=(
+		'django.contrib.staticfiles',
+	),
+	TEMPLATES=(
+		{
+			'BACKEND': 'django.template.backends.django.DjangoTemplates',
+			'DIRS': (os.path.join(BASE_DIR,'templates'),),
+		},
+	),
+	STATICFILES_DIRS=(
+		os.path.join(BASE_DIR,'static'),
+	),
+	STATIC_URL='/static/',
 )
 
-
+import hashlib
+import os
+from django.views.decorators.http import etag
 from django import forms
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.conf.urls import url
@@ -29,6 +46,8 @@ from django.core.wsgi import get_wsgi_application
 from io import BytesIO
 from PIL import Image,ImageDraw
 from django.core.cache import cache
+from django.core.urlresolvers import reverse
+from django.shortcuts import render
 
 application = get_wsgi_application()
 
@@ -37,6 +56,7 @@ class ImageForm(forms.Form):
 
 	height = forms.IntegerField(min_value=1,max_value=2000)
 	width = forms.IntegerField(min_value=1,max_value=2000)
+
 	def generate(self,image_format='PNG'):
 		"""Generate an  image of the given type and return as raw bytes."""
 		height = self.cleaned_data['height']
@@ -58,6 +78,11 @@ class ImageForm(forms.Form):
 			cache.set(key,content, 60*60)
 		return content
 
+def generate_etag(request,width,height):
+	content = 'Placeholder: {0} x {1}'.format(width,height)
+	return hashlib.sha1(content.encode('utf-8')).hexdigest()
+
+@etag(generate_etag)
 def placeholder(request,width, height):
 	form = ImageForm({'height':height,'width':width})
 	if form.is_valid():
@@ -68,7 +93,11 @@ def placeholder(request,width, height):
 	
 
 def index(request):
-	return HttpResponse('Hello World')
+	example = reverse('placeholder',kwargs={'width':50,'height':50})
+	context = {
+		'example':request.build_absolute_uri(example)
+	}
+	return render(request,'home.html',context)
 
 
 urlpatterns = (
